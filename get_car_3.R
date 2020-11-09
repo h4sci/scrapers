@@ -16,7 +16,7 @@ library(jsonlite)
 #          3) Additionally, data should be validated manually against database to ensure this join was correct
 
 
-setwd("smb/Volumes/epl/public/ONGOING_RESEARCH/ZDCinBrazil/Data/Spatial/CAR") # mac - owen
+setwd("/Volumes/epl/public/ONGOING_RESEARCH/ZDCinBrazil/Data/Spatial/CAR") # mac - owen
 setwd("/Volumes/groups/public/ONGOING_RESEARCH/ZDCinBrazil/Data/Spatial/CAR") # mac -sam
 # setwd("Z:/public/ONGOING_RESEARCH/ZDCinBrazil/Data/Spatial/CAR") # for windows
 
