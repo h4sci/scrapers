@@ -74,12 +74,16 @@ urls <- data2 %>%
   #  str_subset("list?filtro=") %>% 
   str_c("http://car.semas.pa.gov.br/site/consulta/imoveis/CODIGO/list?filtro=", ., "&pagina=1")
 
+urls <- c(urls[1:60],"http://car.semas.pa.gov.br/site/consulta/imoveis/CODIGO/list?filtro=PA-1502301-561B1A1DDF85493BA305F230B759553C&pagina=1")
+
 #extract the json data (wrapped inside an html node) #note: currently first 10
-json <- map(urls[1:10], possibly(as.json, NULL))
+json <- map(urls, possibly(as.json, NULL))
 
 #this function/code now robust for CAR codes (although returns centroid as well) & geometries, 
 #it is also robust for multiple returns
-x <- geojson_sf(as.json("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(-46.94938659667969+-2.174084421122967)"))
+
+#test with lat long
+#x <- geojson_sf(as.json("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(-46.94938659667969+-2.174084421122967)"))
 
 key_sf <- map(json,geojson_sf) %>% reduce(rbind)
 
@@ -91,6 +95,7 @@ point <- lapply(key_sf$centro,RJSONIO::fromJSON) %>%
 processed <- cbind(key_sf,point)   #will only work for the lat long urls
 
 processed_u <- na.omit(processed)
+#processed_u <- key_sf
 ggplot() + geom_sf(processed_u,mapping = aes(fill=as.numeric(id)))
 #dim(processed)[1]-dim(processed_u)[1]  #loss of X obs
 
@@ -109,8 +114,8 @@ urls2 <- processed_u %>%
 
 # try
 html2 <- map(urls2, possibly(read_html, NULL))
-html_alt2 <- keep(html2, ~ typeof(.x) == "list")
-html.h2 <- html
+html_alt2 <- keep(html2, ~ typeof(.x) == "list")  #is this necessary?
+#html.h2 <- html
 
 # extract subparts ----------------------------
 
@@ -134,7 +139,8 @@ extract_scts_mult <- function(html,names) {
       return(d)
   }
 
-spread(chunk1,names,values)
+#
+
 
 # run on all
 chunk1 <- map(body2, extract_scts_mult, names = "td")
