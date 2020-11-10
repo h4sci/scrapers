@@ -63,9 +63,13 @@ urls_alt <- paste0("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(",p
 # NOTE: THIS WILL BE VERY  COMPUTATIONALLY HEAVY, CURRENTLY 6,734,860 clicks. Ways to improve:
 #        Remove any points outside the boundaries of PA via:
 #               - turning latlonggrid into a multipoint sf object & clipping to extent of Pará state
-#                         - see https://www.jessesadler.com/post/simple-feature-objects/ for how to do this
-#                         - note: will need to set crs to be identical to Pará
-#                         - note 2: will need to turn back into dataframe for this code to work
+#                         - see https://www.jessesadler.com/post/simple-feature-objects/ for how to work with sf objects
+#                         - and this for clipping https://stackoverflow.com/questions/56247266/sf-package-extract-clip-and-return-a-polygon
+#                         - this discussion useful for how to get the geometries back into dataframe https://github.com/r-spatial/sf/issues/231
+#                         - I had some success with the following: as.data.frame(unclass(sf_object$geometry[1])[[1]][[1]][[1]][[1]])
+#                           however, that code is written to get lat long from single row of sf object...
+#                               - note: will need to set crs to be identical to Pará
+#                               - note 2: will need to turn back into dataframe for this code to work
 #               - optimally choose a point gap that captures all properties with least overlap, taking into account
 #                 both minimum expected property size & corseness of the scale recognised when "clicking" the map
 #         will save a lot of energy/time
