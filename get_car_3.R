@@ -44,7 +44,7 @@ data2 <- read_delim("PGM_mesogregion.csv", delim = ",", trim_ws = TRUE)
 
 # it could also be done by defining origin & creating a grid via something like this https://stackoverflow.com/questions/43436466/create-grid-in-r-for-kriging-in-gstat
 # scale of the grid OR the increment used in seq() will have BIG IMPACT in missing properties
-# currently set at 0.005 degree - or around 0.55 km (at the equator)
+# currently set at 0.005 degree - or around 0.66 km (at the equator)
 # can assume that smallest property in BR Am would be INCRA plots of 25ha @ 250m*1000m
 
  #HOWEVER  WLL NEED AN INTERMEDIARY STEP to turn into a grid like this
@@ -62,8 +62,12 @@ urls_alt <- paste0("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(",p
 
 # NOTE: THIS WILL BE VERY  COMPUTATIONALLY HEAVY, CURRENTLY 6,734,860 clicks. Ways to improve:
 #        Remove any points outside the boundaries of PA via:
-#               - turning 
-#        optimally choose a point gap that captures all properties with least overlap,
+#               - turning latlonggrid into a multipoint sf object & clipping to extent of Pará state
+#                         - see https://www.jessesadler.com/post/simple-feature-objects/ for how to do this
+#                         - note: will need to set crs to be identical to Pará
+#                         - note 2: will need to turn back into dataframe for this code to work
+#               - optimally choose a point gap that captures all properties with least overlap, taking into account
+#                 both minimum expected property size & corseness of the scale recognised when "clicking" the map
 #         will save a lot of energy/time
 
 # scrape pt 1) CAR imovel code & property id  ------------------------------------------------------------------
