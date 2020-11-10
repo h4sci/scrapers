@@ -10,11 +10,12 @@ library(geojsonio)
 
 ##### NOTE:There are a number of places bugs can arise & should be checked #######################
 
-#          1) When scraping imovel & property id can get issues processing the json script due to internal structures. Currently treating as NA. Shouldn't be issue
-#          2a) Dropped observations in html mapping - this is big issue as code & id join is not via matching, simply attaching so if not same length is invalid
-#          2b) observation can be identified by error message and removed if necessary but has to be done FOR ALL SCRAPED SECTIONS
-#          2c) sometimes you just need to rerun that chunk
-#          3) Additionally, data should be validated manually against database to ensure this join was correct
+#  resolved 1) When scraping imovel & property id can get issues processing the json script due to internal structures. Currently treating as NA. Shouldn't be issue
+#           2a) Dropped observations in html mapping - this is big issue as code & id join is not via matching, simply attaching so if not same length is invalid
+#           2b) observation can be identified by error message and removed if necessary but has to be done FOR ALL SCRAPED SECTIONS
+#           2c) sometimes you just need to rerun that chunk
+#                   - potential solution: find a way to append id to every row when scraping, then could left_join but how??
+#           3) Additionally, data should be validated manually against database to ensure this join was correct
 
 
 setwd("~/repositories/scrapers") #for  sam
