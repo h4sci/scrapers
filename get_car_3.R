@@ -5,6 +5,7 @@ library(XML)
 library(data.tree)
 #library(rjson)
 library(jsonlite)
+library(geojsonio)
 
 
 ##### NOTE:There are a number of places bugs can arise & should be checked #######################
@@ -38,28 +39,30 @@ data2 <- read_delim("PGM_mesogregion.csv", delim = ",", trim_ws = TRUE)
 
 # note: this could be done by determining the min/max lat & long - you can see the lat longs on the map link
 
- LONG <- seq(-59.2710,-45.9623,by=0.01)  #quick attempt
- LAT <- seq(2.4602,-10.1852,by=-0.01)    
+ LONG <- seq(-59.2710,-45.9623,by=0.005)  #quick attempt
+ LAT <- seq(2.4602,-10.1852,by=-0.005)    
 
 # it could also be done by defining origin & creating a grid via something like this https://stackoverflow.com/questions/43436466/create-grid-in-r-for-kriging-in-gstat
 # scale of the grid OR the increment used in seq() will have BIG IMPACT in missing properties
-# currently set at 0.01 degree - or around 1.11 km (at the equator)
+# currently set at 0.005 degree - or around 0.55 km (at the equator)
+# can assume that smallest property in BR Am would be INCRA plots of 25ha @ 250m*1000m
 
  #HOWEVER  WLL NEED AN INTERMEDIARY STEP to turn into a grid like this
- x <- expand.grid(LAT,LONG) 
+ latlonggrid <- expand.grid(LAT,LONG) 
  
  # check it is a real grid,  little slow as pulls PA from internet
  ggplot() + 
-   geom_point(data=x,aes(x=Var2,y=Var1)) +
+   geom_point(data=latlonggrid,aes(x=Var2,y=Var1)) +
    geom_sf(geobr::read_state(code_state = "PA"),mapping=aes(fill="red"))
 
  # can then create the urls with the following:
-urls_alt <- paste0("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(",paste(x$Var2,x$Var1,sep="+"),")")
+urls_alt <- paste0("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(",paste(latlonggrid$Var2,latlonggrid$Var1,sep="+"),")")
 
 #after this it is the same as before
 
-# NOTE: THIS WILL BE VERY  COMPUTATIONALLY HEAVY, CURRENTLY 1,683,715 clicks. 
-#        If we can remove any points outside the boundaries of PA and if we can 
+# NOTE: THIS WILL BE VERY  COMPUTATIONALLY HEAVY, CURRENTLY 6,734,860 clicks. Ways to improve:
+#        Remove any points outside the boundaries of PA via:
+#               - turning 
 #        optimally choose a point gap that captures all properties with least overlap,
 #         will save a lot of energy/time
 
@@ -72,37 +75,24 @@ urls <- data2 %>%
   str_c("http://car.semas.pa.gov.br/site/consulta/imoveis/CODIGO/list?filtro=", ., "&pagina=1")
 
 #extract the json data (wrapped inside an html node) #note: currently first 10
-json <- map(urls[1:50], possibly(function(x){fromJSON(x, simplifyVector = F,simplifyDataFrame = F)}, NULL))
+json <- map(urls[1:10], possibly(as.json, NULL))
 
-#write function to extract spatial & non-spatial data & convert it to an sf object 
-# note: see https://www.jessesadler.com/post/simple-feature-objects/ 
+#this function/code now robust for CAR codes (although returns centroid as well) & geometries, 
+#it is also robust for multiple returns
+x <- geojson_sf(as.json("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(-46.94938659667969+-2.174084421122967)"))
 
-sp_extr <- function(x) {            # IS THIS ROBUST TO RESULTS WITH MULTIPLE PROPERTIES RETURNED???
-  #extract non-spatial data         # ALMOST CERTAINLY NOT - COULD ADD FOR LOOP AT THE START TO RUN OVER JSON LISTS
-  data <- as.data.frame(t(unlist(x$features[[1]]$properties)))
-  
-  #extract spatial data and convert it into an array
-  g.raw <- x$features[[1]]$geometry$geometries[[1]]$coordinates[[1]][[1]]   
-  geom <- array(dim=c(length(g.raw),2))  #empty array
-  geom[,1]<- sapply(g.raw,"[[",1)        #first  list item (X coord)
-  geom[,2] <-sapply(g.raw,"[[",2)        #second list item (Y coord)
-  
-  #convert spatial array into an sfg then sfc object
-  geom_sfg <-st_linestring(as.matrix(geom))
-  geom_sfc <- st_sfc(geom_sfg,crs=4326)
-  
-  #link spatial data to non-spatial data and return
-  data_sp <- st_sf(data,geometry=geom_sfc)
-  
-  return(data_sp)
-}
+key_sf <- map(json,geojson_sf) %>% reduce(rbind)
 
-test <- map(json,sp_extr) %>% reduce(rbind)
-test2 <- st_polygonize(test)
+#for the lat long urls, need to expand the JSON of coords still held within column "centro"
+point <- lapply(key_sf$centro,RJSONIO::fromJSON) %>%
+  lapply(function(e) list(geo_type = e$type,long=e$coordinates[1],lat=e$coordinates[2])) %>%
+  data.table::rbindlist()
 
-processed_u <- na.omit(test2)
+processed <- cbind(key_sf,point)   #will only work for the lat long urls
+
+processed_u <- na.omit(processed)
 ggplot() + geom_sf(processed_u,mapping = aes(fill=as.numeric(id)))
-#dim(test2)[1]-dim(processed_u)[1]  #loss of additional 5 obs (7 total)
+#dim(processed)[1]-dim(processed_u)[1]  #loss of X obs
 
 
 
@@ -125,22 +115,32 @@ html.h2 <- html
 # extract subparts ----------------------------
 
 # get main body for each
-body2 <- map(html_alt2, ~ html_node(., ".table-condensed"))
+body2 <- map(html_alt2, ~ html_nodes(., ".table-condensed")) #changing function from html_node() to html_nodes() makes robust for multiple returns here
 
-extract_sections <- function(html, names) {
-  names_out <-  html%>%                         # get contents of node
-    html_nodes(names) %>%        
-    html_text() %>%
-    as.data.frame() %>%
-    separate(1,c("names","values"),": ")          # split at : into names & values
-  return(names_out)
-}
+#create a function that extracts data for all nodes & indicates which node came from
+extract_scts_mult <- function(html,names) {
+  l <- list()    
+  for (i in 1:length(html)) {
+      names_out <-  html[[i]] %>%                         # get contents of node
+        html_nodes(names) %>%        
+        html_text() %>%
+        as.data.frame() %>%
+        separate(1,c("name","values"),": ") %>%    # split at : into names & values
+        mutate(names=paste(name,i,sep="_")) %>%
+        select(-name)
+        l[[i]] <- names_out
+      }
+      d <- reduce(l,rbind)      #works as no matter how many owners, will capture the under "names" & "values"
+      return(d)
+  }
+
+spread(chunk1,names,values)
 
 # run on all
-chunk1 <- map(body2, extract_sections, names = "td")
+chunk1 <- map(body2, extract_scts_mult, names = "td")
 
 # compile to df
-domino <- map_df(chunk1, spread, names, values)
+domino <- map_df(chunk1, spread, names, values) #note: not sure this will work with diff lengths of owners
 
 names(domino) <- c("domino_CPF_CNPJ","domino_nome","domino_tipo")
 
@@ -152,6 +152,14 @@ domino_c <- data.frame(code = processed_u$codigo,id=processed_u$id,domino)
 # scrape pt 3 - imovel  ------------------------------------------------------------------
 
 #NOTE: IMOVEL HAS OTHER ATTRIBUTES WE ARE DROPPING in other nodes (activities on property, forest area)
+
+#can be fixed by taking it node by node, 
+#  i.e. extract_sections works great for .table-condensed node1, 
+#  but node 2 td only returns the types of LU, easy to fix, just need to add name placeholder
+#  for node 3, all info is held in td, which is unfortunate. Fine if always just 2 items, but if longer might need odd & even rule?
+
+#test run
+#d <- html_nodes(read_html("http://car.semas.pa.gov.br/site/imovel/417490/imovelFichaResumida"), ".table-condensed")
 
 # prep urls
 urls3 <- processed_u %>% 
@@ -165,8 +173,17 @@ html_alt3 <- keep(html3, ~ typeof(.x) == "list")
 
 # extract subparts ----------------------------
 
+extract_sections <- function(html, names) {
+  names_out <-  html%>%                         # get contents of node
+    html_nodes(names) %>%        
+    html_text() %>%
+    as.data.frame() %>%
+    separate(1,c("names","values"),": ")          # split at : into names & values
+  return(names_out)
+}
+
 # get main body for each
-body3 <- map(html_alt3, ~ html_node(., ".table-condensed"))
+body3 <- map(html_alt3, ~ html_nodes(., ".table-condensed"))
 
 # run on all
 chunk2 <- map(body3, extract_sections, names = "td")
@@ -214,9 +231,39 @@ names(cadastrante) <- c("cadastrante_CPF","cadastrante_nome","cadastrante_ART","
 
 cadastrante_c <- data.frame(code = processed_u$codigo,id=processed_u$id,cadastrante)
 
-# pt 5? demomnstrativo??? e.g. http://car.semas.pa.gov.br/site/demonstrativo/imovel/PA-1502301-561B1A1DDF85493BA305F230B759553C
+# scrape pt 5- demomnstrativo  ------------------------------------------------------------------
 
-# joining
+#note: missing for some reason
+
+# e.g. http://car.semas.pa.gov.br/site/demonstrativo/imovel/PA-1502301-561B1A1DDF85493BA305F230B759553C
+d <- html_nodes(read_html("http://car.semas.pa.gov.br/site/demonstrativo/imovel/PA-1502301-561B1A1DDF85493BA305F230B759553C"),".demonstrativo-section")
+dd <-html_nodes(read_html("http://car.semas.pa.gov.br/site/demonstrativo/imovel/PA-1502301-561B1A1DDF85493BA305F230B759553C"),".titulo-situacao") #is there a way to also pull?
+ddd <-html_nodes(read_html("http://car.semas.pa.gov.br/site/demonstrativo/imovel/PA-1502301-561B1A1DDF85493BA305F230B759553C"),"#item-sobreposicao-imovel .col-md-7") #is there a way to also pull?
+html_text(ddd)
+
+#this works ge
+p <- html_text(html_nodes(d[[1]],".item-label"))
+pp <- html_text(html_nodes(d[[1]],".col-md-8"))
+cbind(p,pp)
+
+y <- html_text(html_nodes(d[[2]],".item-label"))
+yy <- html_text(html_nodes(d[[2]],".col-md-9"))
+cbind(y,yy)
+
+n <- html_text(html_nodes(d[3:7],".item-label"))
+nn <- html_text(html_nodes(d[3:7],".col-md-3"))
+cbind(n,nn)
+
+s <- html_text(html_nodes(d[[8]],".item-label"))
+ss <- html_text(html_nodes(d[[8]],".col-md-2"))
+cbind(s,ss)
+
+o <- html_text(html_nodes(d[[9]],".text-right"))
+oo <- html_text(html_nodes(d[[9]],".col-md-2"))
+cbind(o,oo)
+#turn into a function 
+
+# joining all ---------------------------------------------------------------------------------
 
 names(processed_u) <- c("id","code","protocolo","area","property_name","geometry")
 
@@ -224,4 +271,6 @@ scrape <- list(processed_u,imovel_c, domino_c, cadastrante_c) %>%
   reduce(left_join, by = c("code", "id"))
 
 write.csv(scrape,"~/Dropbox/Fieldwork_Summer2019/scrape/scraped_data2.csv")
+
+
 
