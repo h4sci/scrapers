@@ -173,6 +173,8 @@ domino_c <- data.frame(code = processed_u$codigo,id=processed_u$id,domino)
 #  but node 2 td only returns the types of LU, easy to fix, just need to add name placeholder
 #  for node 3, all info is held in td, which is unfortunate. Fine if always just 2 items, but if longer might need odd & even rule?
 
+# when run all the urls should check if all the nodes are length 3
+
 #test run
 #d <- html_nodes(read_html("http://car.semas.pa.gov.br/site/imovel/417490/imovelFichaResumida"), ".table-condensed")
 
@@ -188,20 +190,41 @@ html_alt3 <- keep(html3, ~ typeof(.x) == "list")
 
 # extract subparts ----------------------------
 
-extract_sections <- function(html, names) {
-  names_out <-  html%>%                         # get contents of node
-    html_nodes(names) %>%        
+extract_scts_imov <- function(html, names1="td",names2="th") {
+  pt1 <-  html[[1]]%>%                         # get contents of node
+    html_nodes(names1) %>%        
     html_text() %>%
     as.data.frame() %>%
     separate(1,c("names","values"),": ")          # split at : into names & values
-  return(names_out)
+  
+  values2 <-  html[[2]]%>%                         # get contents of node
+    html_nodes(names1) %>%        
+    html_text()
+  pt2 <- data.frame(names=paste0("prod_syst_",1:length(values2)),values=values2)
+  
+  names3 <-  html[[3]]%>%                         # get contents of node
+    html_nodes(names2) %>%        
+    html_text()
+  #get values
+  values3 <- html[[3]] %>% 
+    html_nodes(names1) %>% 
+    html_text()
+  # compile in tibble
+  pt3 <- data.frame(names=names3, values=values3)
+  
+  out <- rbind(pt1,pt2,pt3)
+  return(out)
+  
 }
 
 # get main body for each
 body3 <- map(html_alt3, ~ html_nodes(., ".table-condensed"))
 
+#test function
+extract_scts_imov(body3[[7]]) #works for all but this case, investigate later
+
 # run on all
-chunk2 <- map(body3, extract_sections, names = "td")
+chunk2 <- map(body3, extract_scts_imov)
 
 # compile to df
 imovel <- map_df(chunk2, spread, names, values)
