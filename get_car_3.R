@@ -221,10 +221,11 @@ extract_scts_imov <- function(html, names1="td",names2="th") {
 body3 <- map(html_alt3, ~ html_nodes(., ".table-condensed"))
 
 #test function
-extract_scts_imov(body3[[7]]) #works for all but this case, investigate later
-
+extract_scts_imov(body3[[7]]) #works for all but this case, investigate later 
+                              #issue is that if no info on types of Land Use node,no content held under "td", if length=0 will need to replace with a NA
+                              # same issue for "td" in pt3, get character length 0, so doesn't join. Need a fix for this too
 # run on all
-chunk2 <- map(body3, extract_scts_imov)
+chunk2 <- map(body3[1:6], extract_scts_imov)
 
 # compile to df
 imovel <- map_df(chunk2, spread, names, values)
