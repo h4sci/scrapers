@@ -6,7 +6,7 @@ library(data.tree)
 #library(rjson)
 library(jsonlite)
 library(geojsonio)
-
+library(sf)
 
 ##### NOTE:There are a number of places bugs can arise & should be checked #######################
 
@@ -40,24 +40,38 @@ data2 <- read_delim("PGM_mesogregion.csv", delim = ",", trim_ws = TRUE)
 
 # note: this could be done by determining the min/max lat & long - you can see the lat longs on the map link
 
- LONG <- seq(-59.2710,-45.9623,by=0.005)  #quick attempt
- LAT <- seq(2.4602,-10.1852,by=-0.005)    
+ #get PARÁ 
+ PA <- geobr::read_state(code_state = "PA")
+ 
+ #gen lat longs to cover PA
+ minmax <-  st_bbox(PA) 
+ LONG <- seq(minmax["xmin"],minmax["xmax"],by=0.005) 
+ LAT <- seq(minmax["ymin"],minmax["ymax"],by=0.005)  
+ 
 
+ 
 # it could also be done by defining origin & creating a grid via something like this https://stackoverflow.com/questions/43436466/create-grid-in-r-for-kriging-in-gstat
 # scale of the grid OR the increment used in seq() will have BIG IMPACT in missing properties
 # currently set at 0.005 degree - or around 0.66 km (at the equator)
 # can assume that smallest property in BR Am would be INCRA plots of 25ha @ 250m*1000m
 
  #HOWEVER  WLL NEED AN INTERMEDIARY STEP to turn into a grid like this
- latlonggrid <- expand.grid(LAT,LONG) 
+ latlonggrid <- expand_grid(LONG,LAT) 
+ 
+ # then another to get rid of points outside of PARA 
+ test  <- st_multipoint(as.matrix(latlonggrid))
+ test2 <- st_sfc(test,crs=st_crs(PA))
+ test3 <- st_intersection(test2,PA) #possibly st_within
+ test4 <- as.data.frame(st_coordinates(test3))
  
  # check it is a real grid,  little slow as pulls PA from internet
  ggplot() + 
-   geom_point(data=latlonggrid,aes(x=Var2,y=Var1)) +
-   geom_sf(geobr::read_state(code_state = "PA"),mapping=aes(fill="red"))
+   geom_point(data=test4,aes(x=X,y=Y))+
+   geom_sf(PA,mapping=aes(fill="red")) 
+   
 
  # can then create the urls with the following:
-urls_alt <- paste0("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(",paste(latlonggrid$Var2,latlonggrid$Var1,sep="+"),")")
+urls_alt <- paste0("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(",paste(test4$X,test4$Y,sep="+"),")")
 
 #after this it is the same as before
 
@@ -83,10 +97,11 @@ urls <- data2 %>%
   #  str_subset("list?filtro=") %>% 
   str_c("http://car.semas.pa.gov.br/site/consulta/imoveis/CODIGO/list?filtro=", ., "&pagina=1")
 
-urls <- c(urls[1:60],"http://car.semas.pa.gov.br/site/consulta/imoveis/CODIGO/list?filtro=PA-1502301-561B1A1DDF85493BA305F230B759553C&pagina=1")
+urls <- c(urls_alt[2999950:3000010])
 
 #extract the json data (wrapped inside an html node) #note: currently first 10
 json <- map(urls, possibly(as.json, NULL))
+
 
 #this function/code now robust for CAR codes (although returns centroid as well) & geometries, 
 #it is also robust for multiple returns
@@ -94,18 +109,21 @@ json <- map(urls, possibly(as.json, NULL))
 #test with lat long
 #x <- geojson_sf(as.json("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(-46.94938659667969+-2.174084421122967)"))
 
-key_sf <- map(json,geojson_sf) %>% reduce(rbind)
+key_sf <- map(json,possibly(geojson_sf,NULL)) %>% reduce(rbind)
+
+key_sf_u <- unique(key_sf)
 
 #for the lat long urls, need to expand the JSON of coords still held within column "centro"
-point <- lapply(key_sf$centro,RJSONIO::fromJSON) %>%
+point <- lapply(key_sf_u$centro,RJSONIO::fromJSON) %>%
   lapply(function(e) list(geo_type = e$type,long=e$coordinates[1],lat=e$coordinates[2])) %>%
   data.table::rbindlist()
 
-processed <- cbind(key_sf,point)   #will only work for the lat long urls
+processed <- cbind(key_sf_u,point)   #will only work for the lat long urls #potentially should use st_bind_cols
+processed$centro<-NULL
 
-processed_u <- na.omit(processed)
-#processed_u <- key_sf
-ggplot() + geom_sf(processed_u,mapping = aes(fill=as.numeric(id)))
+#processed_u <- na.omit(processed)
+#processed_u <- key_sf_u
+ggplot() + geom_sf(processed,mapping = aes(fill=as.numeric(id)))
 #dim(processed)[1]-dim(processed_u)[1]  #loss of X obs
 
 
@@ -139,7 +157,7 @@ extract_scts_mult <- function(html,names) {
         html_nodes(names) %>%        
         html_text() %>%
         as.data.frame() %>%
-        separate(1,c("name","values"),": ") %>%    # split at : into names & values
+        separate(1,c("name","values"),": ",extra = "merge") %>%    # split at : into names & values
         mutate(names=paste(name,i,sep="_")) %>%
         select(-name)
         l[[i]] <- names_out
@@ -150,14 +168,13 @@ extract_scts_mult <- function(html,names) {
 
 #
 
-
 # run on all
 chunk1 <- map(body2, extract_scts_mult, names = "td")
 
 # compile to df
 domino <- map_df(chunk1, spread, names, values) #note: not sure this will work with diff lengths of owners
 
-names(domino) <- c("domino_CPF_CNPJ","domino_nome","domino_tipo")
+names(domino) <- paste0("dom_",names(domino))
 
 # just sticking together as operation is sequential & output is same length as input (i.e. successful scrape)
 # I THINK possibly() function above could fix this? replace the NULL with NA?
@@ -195,12 +212,17 @@ extract_scts_imov <- function(html, names1="td",names2="th") {
     html_nodes(names1) %>%        
     html_text() %>%
     as.data.frame() %>%
-    separate(1,c("names","values"),": ")          # split at : into names & values
+    separate(1,c("names","values"),": ",extra = "merge")          # split at : into names & values
   
   values2 <-  html[[2]]%>%                         # get contents of node
     html_nodes(names1) %>%        
     html_text()
-  pt2 <- data.frame(names=paste0("prod_syst_",1:length(values2)),values=values2)
+  
+  if (length(values2)==0) {
+    pt2<-NA
+  }else{
+    pt2 <- data.frame(names=paste0("prod_syst_",1:length(values2)),values=values2)    
+    }
   
   names3 <-  html[[3]]%>%                         # get contents of node
     html_nodes(names2) %>%        
@@ -210,9 +232,23 @@ extract_scts_imov <- function(html, names1="td",names2="th") {
     html_nodes(names1) %>% 
     html_text()
   # compile in tibble
-  pt3 <- data.frame(names=names3, values=values3)
+  if (length(values3)==0 |length(names3)==0 ) {
+    pt3<-NA
+  }else{
+    pt3 <- data.frame(names=names3, values=values3)    
+  }
   
-  out <- rbind(pt1,pt2,pt3)
+  if(!is.na(pt3)&&!is.na(pt2)) {
+    out <- rbind(pt1,pt2,pt3)
+  }else if (!is.na(pt2) && is.na(pt3)) {
+    out <- rbind(pt1,pt2) 
+  }else if (is.na(pt2) && !is.na(pt3)) {
+    out <- rbind(pt1,pt3) 
+  } else{
+    out <- rbind(pt1)    
+    } 
+  
+  
   return(out)
   
 }
@@ -220,17 +256,13 @@ extract_scts_imov <- function(html, names1="td",names2="th") {
 # get main body for each
 body3 <- map(html_alt3, ~ html_nodes(., ".table-condensed"))
 
-#test function
-extract_scts_imov(body3[[7]]) #works for all but this case, investigate later 
-                              #issue is that if no info on types of Land Use node,no content held under "td", if length=0 will need to replace with a NA
-                              # same issue for "td" in pt3, get character length 0, so doesn't join. Need a fix for this too
 # run on all
-chunk2 <- map(body3[1:6], extract_scts_imov)
+chunk2 <- map(body3, extract_scts_imov)
 
 # compile to df
 imovel <- map_df(chunk2, spread, names, values)
 
-names(imovel)       <- c("imovel_CEP","access","Fisc_models","Muni_UF","imovel_nome","imovel_tipo","RURAL_URBANO")
+#names(imovel)       <- c("imovel_CEP","access","Fisc_models","Muni_UF","imovel_nome","imovel_tipo","RURAL_URBANO")
 
 #swap , for  . & convert to numeric
 imovel$Fisc_models <- as.numeric(gsub(",", ".", gsub("\\.", "", imovel$Fisc_models)))
