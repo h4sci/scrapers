@@ -48,7 +48,8 @@ data2 <- read_delim("PGM_mesogregion.csv", delim = ",", trim_ws = TRUE)
  LONG <- seq(minmax["xmin"],minmax["xmax"],by=0.005) 
  LAT <- seq(minmax["ymin"],minmax["ymax"],by=0.005)  
  
-
+# can it all just be gotten from this?
+ #http://car.semas.pa.gov.br/site/geoserver/secar-pa/wms?SERVICE=WMS&REQUEST=GetCapabilities
  
 # it could also be done by defining origin & creating a grid via something like this https://stackoverflow.com/questions/43436466/create-grid-in-r-for-kriging-in-gstat
 # scale of the grid OR the increment used in seq() will have BIG IMPACT in missing properties
@@ -97,7 +98,7 @@ urls <- data2 %>%
   #  str_subset("list?filtro=") %>% 
   str_c("http://car.semas.pa.gov.br/site/consulta/imoveis/CODIGO/list?filtro=", ., "&pagina=1")
 
-urls <- c(urls_alt[2999950:3000010])
+urls <- c(urls_alt[2999890:3000010])
 
 #extract the json data (wrapped inside an html node) #note: currently first 10
 json <- map(urls, possibly(as.json, NULL))
@@ -123,7 +124,8 @@ processed$centro<-NULL
 
 #processed_u <- na.omit(processed)
 #processed_u <- key_sf_u
-ggplot() + geom_sf(processed,mapping = aes(fill=as.numeric(id)))
+ggplot() + geom_sf(processed,mapping=aes(fill=as.numeric(id)))+
+  geom_sf(processed,fill=NA,colour="black",mapping=aes())
 #dim(processed)[1]-dim(processed_u)[1]  #loss of X obs
 
 
