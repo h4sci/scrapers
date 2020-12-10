@@ -7,7 +7,24 @@ library(data.tree)
 library(jsonlite)
 library(geojsonio)
 library(sf)
+library(httr)
+library(ows4R)
 
+
+#adding a quick attempt at using ows4R
+#see https://inbo.github.io/tutorials/tutorials/spatial_wfs_services/
+car_wms <- "http://car.semas.pa.gov.br/site/geoserver/secar-pa/wms"
+url <- parse_url(car_wms)
+url$query <- list(service = "WMS",
+                  version = "1.3.0",
+                  request = "GetCapabilities")
+request <- build_url(url)
+request
+
+car_client <- OWSClient$new(car_wms,
+                            serviceVersion = "1.3.0")
+
+car_client
 ##### NOTE:There are a number of places bugs can arise & should be checked #######################
 
 #  resolved 1) When scraping imovel & property id can get issues processing the json script due to internal structures. Currently treating as NA. Shouldn't be issue
@@ -47,6 +64,8 @@ data2 <- read_delim("PGM_mesogregion.csv", delim = ",", trim_ws = TRUE)
  minmax <-  st_bbox(PA) 
  LONG <- seq(minmax["xmin"],minmax["xmax"],by=0.005) 
  LAT <- seq(minmax["ymin"],minmax["ymax"],by=0.005)  
+ 
+ 
  
 # can it all just be gotten from this?
  #http://car.semas.pa.gov.br/site/geoserver/secar-pa/wms?SERVICE=WMS&REQUEST=GetCapabilities
