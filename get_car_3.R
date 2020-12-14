@@ -9,22 +9,101 @@ library(geojsonio)
 library(sf)
 library(httr)
 library(ows4R)
+library(leaflet)
 
 
-#adding a quick attempt at using ows4R
-#see https://inbo.github.io/tutorials/tutorials/spatial_wfs_services/
+#see these for how to on using ows4R
+#https://inbo.github.io/tutorials/tutorials/spatial_wms_services/
+#https://inbo.github.io/tutorials/tutorials/spatial_wfs_services/
+
 car_wms <- "http://car.semas.pa.gov.br/site/geoserver/secar-pa/wms"
 url <- parse_url(car_wms)
-url$query <- list(service = "WMS",
+
+#get capabilties
+url$query <- list(service = "WFS",
                   version = "1.3.0",
                   request = "GetCapabilities")
-request <- build_url(url)
+request <- build_url(url) 
+request #look this up to see capabilities
+
+#try to build a query & get the data
+url$query <- list(service = "WFS",
+                  version = "1.3.0",
+                  request = "GetFeature",
+                  typename = "dnpm", #works for dnpm but not for the data I want (typename = "imovel")
+                  #   bbox    = "-5831228.013819526,-391357.5848201023,-5792092.255337516,-352221.8263380924",
+                  crs = "EPSG:WGS84(DD)",
+                  #   feature_count = 100,
+                  outputFormat = "application/json")
+
+
+request <- build_url(url) 
 request
 
-car_client <- OWSClient$new(car_wms,
+st_layers(request)
+test <- st_read(request) #this works great
+
+
+# exploratory stuff
+car_client <- WFSClient$new(car_wms,
                             serviceVersion = "1.3.0")
 
-car_client
+
+car_client$getCapabilities()$
+  getOperationsMetadata()$
+  getOperations() %>%
+  map(function(x){x$getName()})
+
+car_client$getFeatureTypes(pretty=T)
+
+#this might be the issue - imovel has 2 parts, how to fix? Surely something to specify in URL syntax. It seems the keywords differ
+car_client$
+  getCapabilities()$
+  findFeatureTypeByName("imovel")
+
+car_client$
+  getCapabilities()$
+  findFeatureTypeByName("imovel")[[2]]$  #only works when you specify the list item
+  getFeatures()
+
+car_client$getCapabilities()$
+  getOperationsMetadata()$
+  getOperations() %>%
+  map(function(x){x$getParameters()}) %>%
+  purrr::pluck(3,"outputFormat")
+
+car_client$getCapabilities()$
+  getFeatureTypes() %>%
+  map(function(x){x$getBoundingBox()})
+
+x <- car_client$getFeatureTypes(pretty=T)
+
+#try to build a query & get the data
+l <- list()
+l[1:dim(x)[2]] <- parse_url(car_wms)
+for (i in 1:length(x)) {
+  
+}
+
+getCAR<- function(x,car_wms="http://car.semas.pa.gov.br/site/geoserver/secar-pa/wms") {
+  url <- parse_url(car_wms)
+  url$query <- list(service = "WFS",
+                    version = "1.3.0",
+                    request = "GetFeature",
+                    typename = x,
+                    crs = "EPSG:WGS84(DD)",
+                    outputFormat = "application/json")
+  
+  request <- build_url(url) 
+  return(request)
+}
+
+d <- map(x$title, getCAR)
+
+t <- map(d,possibly(read_sf,otherwise=NULL))
+
+
+
 ##### NOTE:There are a number of places bugs can arise & should be checked #######################
 
 #  resolved 1) When scraping imovel & property id can get issues processing the json script due to internal structures. Currently treating as NA. Shouldn't be issue
@@ -57,40 +136,40 @@ data2 <- read_delim("PGM_mesogregion.csv", delim = ",", trim_ws = TRUE)
 
 # note: this could be done by determining the min/max lat & long - you can see the lat longs on the map link
 
- #get PARÁ 
- PA <- geobr::read_state(code_state = "PA")
- 
- #gen lat longs to cover PA
- minmax <-  st_bbox(PA) 
- LONG <- seq(minmax["xmin"],minmax["xmax"],by=0.005) 
- LAT <- seq(minmax["ymin"],minmax["ymax"],by=0.005)  
- 
- 
- 
+#get PARÁ 
+PA <- geobr::read_state(code_state = "PA")
+
+#gen lat longs to cover PA
+minmax <-  st_bbox(PA) 
+LONG <- seq(minmax["xmin"],minmax["xmax"],by=0.005) 
+LAT <- seq(minmax["ymin"],minmax["ymax"],by=0.005)  
+
+
+
 # can it all just be gotten from this?
- #http://car.semas.pa.gov.br/site/geoserver/secar-pa/wms?SERVICE=WMS&REQUEST=GetCapabilities
- 
+#http://car.semas.pa.gov.br/site/geoserver/secar-pa/wms?SERVICE=WMS&REQUEST=GetCapabilities
+
 # it could also be done by defining origin & creating a grid via something like this https://stackoverflow.com/questions/43436466/create-grid-in-r-for-kriging-in-gstat
 # scale of the grid OR the increment used in seq() will have BIG IMPACT in missing properties
 # currently set at 0.005 degree - or around 0.66 km (at the equator)
 # can assume that smallest property in BR Am would be INCRA plots of 25ha @ 250m*1000m
 
- #HOWEVER  WLL NEED AN INTERMEDIARY STEP to turn into a grid like this
- latlonggrid <- expand_grid(LONG,LAT) 
- 
- # then another to get rid of points outside of PARA 
- test  <- st_multipoint(as.matrix(latlonggrid))
- test2 <- st_sfc(test,crs=st_crs(PA))
- test3 <- st_intersection(test2,PA) #possibly st_within
- test4 <- as.data.frame(st_coordinates(test3))
- 
- # check it is a real grid,  little slow as pulls PA from internet
- ggplot() + 
-   geom_point(data=test4,aes(x=X,y=Y))+
-   geom_sf(PA,mapping=aes(fill="red")) 
-   
+#HOWEVER  WLL NEED AN INTERMEDIARY STEP to turn into a grid like this
+latlonggrid <- expand_grid(LONG,LAT) 
 
- # can then create the urls with the following:
+# then another to get rid of points outside of PARA 
+test  <- st_multipoint(as.matrix(latlonggrid))
+test2 <- st_sfc(test,crs=st_crs(PA))
+test3 <- st_intersection(test2,PA) #possibly st_within
+test4 <- as.data.frame(st_coordinates(test3))
+
+# check it is a real grid,  little slow as pulls PA from internet
+ggplot() + 
+  geom_point(data=test4,aes(x=X,y=Y))+
+  geom_sf(PA,mapping=aes(fill="red")) 
+
+
+# can then create the urls with the following:
 urls_alt <- paste0("http://car.semas.pa.gov.br/site/lotes/wkt?pontoWkt=POINT(",paste(test4$X,test4$Y,sep="+"),")")
 
 #after this it is the same as before
@@ -174,18 +253,18 @@ body2 <- map(html_alt2, ~ html_nodes(., ".table-condensed")) #changing function 
 extract_scts_mult <- function(html,names) {
   l <- list()    
   for (i in 1:length(html)) {
-      names_out <-  html[[i]] %>%                         # get contents of node
-        html_nodes(names) %>%        
-        html_text() %>%
-        as.data.frame() %>%
-        separate(1,c("name","values"),": ",extra = "merge") %>%    # split at : into names & values
-        mutate(names=paste(name,i,sep="_")) %>%
-        select(-name)
-        l[[i]] <- names_out
-      }
-      d <- reduce(l,rbind)      #works as no matter how many owners, will capture the under "names" & "values"
-      return(d)
+    names_out <-  html[[i]] %>%                         # get contents of node
+      html_nodes(names) %>%        
+      html_text() %>%
+      as.data.frame() %>%
+      separate(1,c("name","values"),": ",extra = "merge") %>%    # split at : into names & values
+      mutate(names=paste(name,i,sep="_")) %>%
+      select(-name)
+    l[[i]] <- names_out
   }
+  d <- reduce(l,rbind)      #works as no matter how many owners, will capture the under "names" & "values"
+  return(d)
+}
 
 #
 
@@ -243,7 +322,7 @@ extract_scts_imov <- function(html, names1="td",names2="th") {
     pt2<-NA
   }else{
     pt2 <- data.frame(names=paste0("prod_syst_",1:length(values2)),values=values2)    
-    }
+  }
   
   names3 <-  html[[3]]%>%                         # get contents of node
     html_nodes(names2) %>%        
@@ -267,7 +346,7 @@ extract_scts_imov <- function(html, names1="td",names2="th") {
     out <- rbind(pt1,pt3) 
   } else{
     out <- rbind(pt1)    
-    } 
+  } 
   
   
   return(out)
@@ -363,6 +442,3 @@ scrape <- list(processed_u,imovel_c, domino_c, cadastrante_c) %>%
   reduce(left_join, by = c("code", "id"))
 
 write.csv(scrape,"~/Dropbox/Fieldwork_Summer2019/scrape/scraped_data2.csv")
-
-
-
