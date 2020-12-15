@@ -3,13 +3,17 @@ library(shinydashboard)
 
 
 ## Data
-setwd("~/Dropbox/PhD/Courses/hack4sci/test_repo/")
-scrape <- read.csv("small_data.csv", encoding = "UTF-8")
-head(scrape)
-attach(scrape)
-scrape <- scrape[,c("id","area","Muni","UF","cadastrante_Profissao")]
-colnames(scrape) <- c("id","area","municipality","state","owner_profession")
-write.csv(scrape, "small_data_anon.csv")
+setwd("~/Dropbox/PhD/Courses/hack4sci/scrapers")
+
+# ## anonymize data
+# scrape <- read.csv("small_data.csv", encoding = "UTF-8")
+# head(scrape)
+# attach(scrape)
+# scrape <- scrape[,c("id","area","Muni","UF","cadastrante_Profissao")]
+# colnames(scrape) <- c("id","area","municipality","state","owner_profession")
+# write.csv(scrape, "small_data_anon.csv")
+
+scrape <- read.csv("small_data_anon.csv", encoding="UTF-8")
 
 ## Shiny
 ui <- dashboardPage(skin="red",
