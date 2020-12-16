@@ -1,6 +1,9 @@
 library(shiny)
 library(shinydashboard)
 
+library(leaflet)
+library(spData)
+library(dplyr)
 
 ## Data
 setwd("~/Dropbox/PhD/Courses/hack4sci/scrapers")
@@ -36,7 +39,17 @@ ui <- dashboardPage(skin="red",
                                   h1("Brazil"),
                                   dataTableOutput("proptable")
                                 )
-                        )
+                        ),
+                        tabItem("map",
+                                fluidPage(
+                                  h1("Map"),
+                                  # slider input for year, numeric input for population 
+                                  leafletOutput("map", height = 800),
+                                  absolutePanel(top = 100, right = 10, draggable = TRUE,
+                                                dateInput("dateinput", "Imagery Date", value = "2018-03-28"
+                                                )
+                                  )
+                                ))
                       )
                     )
 )
@@ -50,10 +63,23 @@ server <- function(input, output){
     sidebarMenu(
       id = "tabs",
       menuItem("Iris", tabName="iris", icon=icon("flower")),
-      menuItem("Brazil", tabName="brazil", icon=icon("tree"))
+      menuItem("Brazil", tabName="brazil", icon=icon("tree")),
+      menuItem("Map", tabName="map", icon=icon("map"))
     )
   })
   output$proptable <- renderDataTable(scrape)
+  output$map <- renderLeaflet({
+    leaflet() %>%
+      addTiles(group = "OSM") %>%
+      addProviderTiles(providers$Esri.WorldImagery, group = "Esri World Imagery") %>%
+      setView(lat = -4.984035409464784, lng = -52.614175513495034, zoom=6) %>%
+      addMarkers(lat = -4.984035409464784, lng = -52.614175513495034, popup = "State of Para, Brazil", group = "state label") %>%
+      addLayersControl(baseGroups = c("OSM", "Esri World Imagery"), 
+                       overlayGroups = c("state label"),
+                       options = layersControlOptions(collapsed = FALSE)) %>% 
+      addMiniMap(zoomLevelOffset = -4) %>% 
+      addScaleBar()
+  })
 }
 
 shinyApp(ui, server)
