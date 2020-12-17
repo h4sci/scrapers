@@ -1,6 +1,22 @@
+## Package check
+packages = c("shiny", "shinydashboard", "leaflet", 
+             "spData", "dplyr","geometa","ows4R", "rgdal")
+
+## Now load or install&load all
+package.check <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+
+
+## Libraries
 library(shiny)
 library(shinydashboard)
-
 library(leaflet)
 library(spData)
 library(dplyr)
