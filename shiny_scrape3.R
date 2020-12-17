@@ -16,7 +16,9 @@ setwd("~/Dropbox/PhD/Courses/hack4sci/scrapers")
 # colnames(scrape) <- c("id","area","municipality","state","owner_profession")
 # write.csv(scrape, "small_data_anon.csv")
 
-scrape <- read.csv("small_data_anon.csv", encoding="UTF-8")
+scrape <- read.csv("scraped_data_format.csv", encoding="UTF-8")
+scrape$domino_tipo <- as.factor(scrape$domino_tipo)
+scrape$cadastrante_Profissao <- as.factor(scrape$cadastrante_Profissao)
 
 ## Shiny
 ui <- dashboardPage(skin="red",
@@ -28,13 +30,19 @@ ui <- dashboardPage(skin="red",
                     ),
                     dashboardBody(
                       tabItems(
-                        tabItem("iris",
-                                box(plotOutput("correlation_plot"), width=8),
+                        tabItem("owners",
+                                box(plotOutput("barplot"), width=8),
                                 box(
-                                  selectInput("features", "Features:",c("Sepal.Width","Petal.Length","Petal.Width")), width=4
+                                  selectInput("features", "Features:",c("cadastrante_Profissao","domino_tipo")), width=4
                                 )
                         ),
-                        tabItem("brazil",
+                        tabItem("properties",
+                                box(plotOutput("boxplot"), width=8),
+                                box(
+                                  selectInput("features", "Features:",c("cadastrante_Profissao","domino_tipo")), width=4
+                                )
+                        ),
+                        tabItem("data",
                                 fluidPage(
                                   h1("Brazil"),
                                   dataTableOutput("proptable")
@@ -55,17 +63,20 @@ ui <- dashboardPage(skin="red",
 )
 
 server <- function(input, output){
-  output$correlation_plot <- renderPlot({
-    plot(iris$Sepal.Length,iris[[input$features]],
-         xlab="Sepal length", ylab="Feature")
-  })
   output$menu <- renderMenu({
     sidebarMenu(
       id = "tabs",
-      menuItem("Iris", tabName="iris", icon=icon("flower")),
-      menuItem("Brazil", tabName="brazil", icon=icon("tree")),
+      menuItem("Owners", tabName="owners", icon=icon("user")),
+      menuItem("Properties", tabName="properties", icon=icon("chart-area")),
+      menuItem("Data", tabName="data", icon=icon("table")),
       menuItem("Map", tabName="map", icon=icon("map"))
     )
+  })
+  output$barplot <- renderPlot({
+    barplot(table(scrape[[input$features]]), xlab="Owner Type or Occupation", ylab="Count")
+  })
+  output$boxplot <- renderPlot({
+    plot(scrape[[input$features]],scrape$area, xlab="Owner Type or Occupation", ylab="Property Area (ha)")
   })
   output$proptable <- renderDataTable(scrape)
   output$map <- renderLeaflet({
@@ -84,6 +95,7 @@ server <- function(input, output){
 
 shinyApp(ui, server)
 
+
 #### Tutorial Links
 # https://www.youtube.com/watch?v=41jmGq7ALMY
 # https://www.youtube.com/watch?v=Gyrfsrd4zK0
@@ -99,3 +111,37 @@ shinyApp(ui, server)
 # https://inbo.github.io/tutorials/tutorials/spatial_wfs_services/
 # https://stackoverflow.com/questions/39815494/how-to-use-wms-in-r
 # http://manpages.ubuntu.com/manpages/cosmic/man1/r.in.wms.1grass.html
+
+#### Ideas
+# Could incorporate municipal boundaries and other data from this website:
+# https://www.citypopulation.de/en/brazil/para/
+
+
+
+#### Retired script
+# tabItem("iris",
+#         box(plotOutput("correlation_plot"), width=8),
+#         box(
+#           selectInput("features", "Features:",c("Sepal.Width","Petal.Length","Petal.Width")), width=4
+#         )
+# ),
+
+# output$barplot <- renderPlot({
+#   plot(scrape$domino_tipo,median(scrape[[input$features]]),
+#        xlab="Owner Type", ylab="Feature")
+
+# which(scrape$domino_tipo=="Pessoa fisica",)
+# which(scrape$domino_tipo=="Pessoa juridica",)
+
+# barplot(table(scrape$cadastrante_Profissao))
+# barplot(table(scrape$domino_tipo))
+
+
+## Produces medians of each level of domino_tipo (owner type)
+# scrape$medians=ave(
+#   scrape$area,
+#   scrape$domino_tipo,
+#   FUN=median)
+
+# plot(scrape$domino_tipo,scrape$area, xlab="Owner type", ylab="Property Area (ha)")
+# plot(scrape$cadastrante_Profissao, scrape$area, xlab="Occupation", ylab="Property Area (ha)")
