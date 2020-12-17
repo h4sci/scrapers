@@ -1,0 +1,12 @@
+name: shiny-app
+title: shiny-app
+username:
+account: ocortner
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3412124
+bundleId: 4001181
+url: https://ocortner.shinyapps.io/shiny-app/
+when: 1608207823.41172
+asMultiple: FALSE
+asStatic: FALSE

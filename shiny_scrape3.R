@@ -14,12 +14,15 @@ package.check <- lapply(
 )
 
 
-## Libraries
-library(shiny)
-library(shinydashboard)
-library(leaflet)
-library(spData)
-library(dplyr)
+## Libraries (redundant with package function at beginning)
+# library(shiny)
+# library(shinydashboard)
+# library(leaflet)
+# library(spData)
+# library(dplyr)
+# library(geometa)
+# library(ows4R)
+# library(rgdal)
 
 ## Data
 setwd("~/Dropbox/PhD/Courses/hack4sci/scrapers")
