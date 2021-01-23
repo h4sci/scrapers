@@ -1,4 +1,5 @@
 ## Package check
+# package function from https://vbaliga.github.io/verify-that-r-packages-are-installed-and-loaded/ 
 packages = c("shiny", "shinydashboard", "leaflet", 
              "spData", "dplyr","geometa","ows4R", "rgdal")
 
@@ -12,7 +13,6 @@ package.check <- lapply(
     }
   }
 )
-
 
 ## Libraries (redundant with package function at beginning)
 # library(shiny)
